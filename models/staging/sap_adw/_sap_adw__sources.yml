@@ -1,0 +1,286 @@
+version: 2
+
+sources:
+  - name: sap_adw
+    description: Adventure Works ERP (SAP) data landed in Databricks by the EL step. Only the adventure_works schema is used.
+    database: fea_academy
+    schema: adventure_works
+    tables:
+      - name: salesorderheader
+        identifier: sales_salesorderheader
+        description: Sales order header. Grain is one sales order.
+        columns:
+          - name: salesorderid
+            description: Primary key of the sales order.
+            data_tests:
+              - unique
+              - not_null
+          - name: orderdate
+            description: Date the order was placed.
+            data_tests:
+              - not_null
+          - name: status
+            description: Order status code (1 In Process, 2 Approved, 3 Backordered, 4 Rejected, 5 Shipped, 6 Cancelled).
+            data_tests:
+              - not_null
+              - accepted_values:
+                  arguments:
+                    values: [1, 2, 3, 4, 5, 6]
+                    quote: false
+          - name: onlineorderflag
+            description: True for online orders, false for reseller orders.
+            data_tests:
+              - not_null
+          - name: customerid
+            description: Foreign key to the customer.
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('sap_adw', 'customer')
+                    field: customerid
+          - name: shiptoaddressid
+            description: Foreign key to the ship-to address.
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('sap_adw', 'address')
+                    field: addressid
+          - name: creditcardid
+            description: Foreign key to the credit card; null when the order has no card.
+            data_tests:
+              - relationships:
+                  arguments:
+                    to: source('sap_adw', 'creditcard')
+                    field: creditcardid
+
+      - name: salesorderdetail
+        identifier: sales_salesorderdetail
+        description: Sales order lines. Grain is one product within one sales order.
+        columns:
+          - name: salesorderdetailid
+            description: Primary key of the order line.
+            data_tests:
+              - unique
+              - not_null
+          - name: salesorderid
+            description: Foreign key to the sales order header.
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('sap_adw', 'salesorderheader')
+                    field: salesorderid
+          - name: productid
+            description: Foreign key to the product.
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('sap_adw', 'product')
+                    field: productid
+          - name: orderqty
+            description: Units bought on the line.
+            data_tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  arguments:
+                    min_value: 1
+          - name: unitprice
+            description: Selling price per unit.
+            data_tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  arguments:
+                    min_value: 0
+          - name: unitpricediscount
+            description: Discount rate on the line (0.10 = 10%).
+            data_tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  arguments:
+                    min_value: 0
+                    max_value: 1
+
+      - name: salesorderheadersalesreason
+        identifier: sales_salesorderheadersalesreason
+        description: Link between orders and sales reasons. An order can have zero, one or many reasons.
+        data_tests:
+          - dbt_utils.unique_combination_of_columns:
+              arguments:
+                combination_of_columns: ['salesorderid', 'salesreasonid']
+        columns:
+          - name: salesorderid
+            description: Foreign key to the sales order header.
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('sap_adw', 'salesorderheader')
+                    field: salesorderid
+          - name: salesreasonid
+            description: Foreign key to the sales reason.
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('sap_adw', 'salesreason')
+                    field: salesreasonid
+
+      - name: salesreason
+        identifier: sales_salesreason
+        description: Catalog of sales reasons.
+        columns:
+          - name: salesreasonid
+            description: Primary key of the sales reason.
+            data_tests:
+              - unique
+              - not_null
+
+      - name: customer
+        identifier: sales_customer
+        description: Customers. Individuals link to person; resellers link to store.
+        columns:
+          - name: customerid
+            description: Primary key of the customer.
+            data_tests:
+              - unique
+              - not_null
+          - name: personid
+            description: Foreign key to the person (individual customer or store contact).
+            data_tests:
+              - relationships:
+                  arguments:
+                    to: source('sap_adw', 'person')
+                    field: businessentityid
+          - name: storeid
+            description: Foreign key to the store, for reseller customers.
+            data_tests:
+              - relationships:
+                  arguments:
+                    to: source('sap_adw', 'store')
+                    field: businessentityid
+
+      - name: person
+        identifier: person_person
+        description: People (customers, store contacts, employees).
+        columns:
+          - name: businessentityid
+            description: Primary key of the person.
+            data_tests:
+              - unique
+              - not_null
+
+      - name: store
+        identifier: sales_store
+        description: Reseller stores.
+        columns:
+          - name: businessentityid
+            description: Primary key of the store.
+            data_tests:
+              - unique
+              - not_null
+
+      - name: product
+        identifier: production_product
+        description: Products.
+        columns:
+          - name: productid
+            description: Primary key of the product.
+            data_tests:
+              - unique
+              - not_null
+          - name: productsubcategoryid
+            description: Foreign key to the subcategory; null for products without one.
+            data_tests:
+              - relationships:
+                  arguments:
+                    to: source('sap_adw', 'productsubcategory')
+                    field: productsubcategoryid
+
+      - name: productsubcategory
+        identifier: production_productsubcategory
+        description: Product subcategories.
+        columns:
+          - name: productsubcategoryid
+            description: Primary key of the subcategory.
+            data_tests:
+              - unique
+              - not_null
+          - name: productcategoryid
+            description: Foreign key to the category.
+            data_tests:
+              - relationships:
+                  arguments:
+                    to: source('sap_adw', 'productcategory')
+                    field: productcategoryid
+
+      - name: productcategory
+        identifier: production_productcategory
+        description: Product categories.
+        columns:
+          - name: productcategoryid
+            description: Primary key of the category.
+            data_tests:
+              - unique
+              - not_null
+
+      - name: creditcard
+        identifier: sales_creditcard
+        description: Credit cards used to pay orders.
+        columns:
+          - name: creditcardid
+            description: Primary key of the credit card.
+            data_tests:
+              - unique
+              - not_null
+
+      - name: address
+        identifier: person_address
+        description: Addresses.
+        columns:
+          - name: addressid
+            description: Primary key of the address.
+            data_tests:
+              - unique
+              - not_null
+          - name: stateprovinceid
+            description: Foreign key to the state or province.
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('sap_adw', 'stateprovince')
+                    field: stateprovinceid
+
+      - name: stateprovince
+        identifier: person_stateprovince
+        description: States and provinces.
+        columns:
+          - name: stateprovinceid
+            description: Primary key of the state or province.
+            data_tests:
+              - unique
+              - not_null
+          - name: countryregioncode
+            description: Foreign key to the country.
+            data_tests:
+              - relationships:
+                  arguments:
+                    to: source('sap_adw', 'countryregion')
+                    field: countryregioncode
+
+      - name: countryregion
+        identifier: person_countryregion
+        description: Countries and regions.
+        columns:
+          - name: countryregioncode
+            description: >
+              Primary key of the country (ISO code). One row arrives null from the EL load:
+              Namibia's code "NA" was read as a null marker. Repaired in staging.
+            data_tests:
+              - unique
+              - not_null:
+                  config:
+                    severity: warn
