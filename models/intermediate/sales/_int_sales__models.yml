@@ -1,0 +1,53 @@
+version: 2
+
+models:
+  - name: int_sales__order_items
+    description: >
+      Order lines joined to their order header, with card type and promotion flag.
+      Same grain as the order lines: one row per sales order line.
+    data_tests:
+      - dbt_utils.equal_rowcount:
+          arguments:
+            compare_model: ref('stg_sap_adw__salesorderdetail')
+    columns:
+      - name: sales_order_detail_pk
+        description: Order line id; must stay unique after the joins.
+        data_tests: [unique, not_null]
+      - name: card_type
+        description: Card type, or 'Not informed' when the order has no card.
+        data_tests: [not_null]
+      - name: is_promotion_order
+        description: True when the order has at least one reason of type Promotion.
+        data_tests: [not_null]
+
+  - name: int_sales__customers
+    description: One row per customer, with name and type (individual or store).
+    data_tests:
+      - dbt_utils.equal_rowcount:
+          arguments:
+            compare_model: ref('stg_sap_adw__customer')
+    columns:
+      - name: customer_pk
+        data_tests: [unique, not_null]
+      - name: customer_name
+        data_tests: [not_null]
+
+  - name: int_sales__products
+    description: One row per product, with subcategory and category names.
+    data_tests:
+      - dbt_utils.equal_rowcount:
+          arguments:
+            compare_model: ref('stg_sap_adw__product')
+    columns:
+      - name: product_pk
+        data_tests: [unique, not_null]
+
+  - name: int_sales__locations
+    description: One row per address, with state or province and country.
+    data_tests:
+      - dbt_utils.equal_rowcount:
+          arguments:
+            compare_model: ref('stg_sap_adw__address')
+    columns:
+      - name: address_pk
+        data_tests: [unique, not_null]
