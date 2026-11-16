@@ -276,7 +276,11 @@ sources:
         description: Countries and regions.
         columns:
           - name: countryregioncode
-            description: Primary key of the country (ISO code).
+            description: >
+              Primary key of the country (ISO code). One row arrives null from the EL load:
+              Namibia's code "NA" was read as a null marker. Repaired in staging.
             data_tests:
               - unique
-              - not_null
+              - not_null:
+                  config:
+                    severity: warn
