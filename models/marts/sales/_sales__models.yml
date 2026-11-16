@@ -1,0 +1,212 @@
+version: 2
+
+models:
+  - name: fct_sales
+    description: >
+      Sales at order line grain: one row per product within a sales order.
+      Built from salesorderheader and salesorderdetail. Holds the measures used by the
+      dashboard (quantity, gross, discount and net amounts) and the order attributes kept
+      in the fact as degenerate dimensions (order id, status, card type, channel, promotion flag).
+      Sales reasons are many-to-many with orders and are reached through bridge_sales_reasons.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "net_amount <= gross_amount"
+    columns:
+      - name: sales_sk
+        description: Surrogate key of the order line (hash of salesorderdetailid).
+        data_tests: [unique, not_null]
+      - name: sales_order_id
+        description: Sales order number (degenerate dimension). Count distinct to get number of orders.
+        data_tests: [not_null]
+      - name: sales_order_detail_id
+        description: Order line id from the source.
+      - name: customer_fk
+        description: Foreign key to dim_customers.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_sk
+      - name: product_fk
+        description: Foreign key to dim_products.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_products')
+                field: product_sk
+      - name: ship_to_address_fk
+        description: Foreign key to dim_locations (ship-to address, where the sale is delivered).
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_locations')
+                field: location_sk
+      - name: order_date
+        description: Date the order was placed. Joins to dim_dates.date_day.
+        data_tests: [not_null]
+      - name: order_status
+        description: Order status decoded from the source code (In Process, Approved, Backordered, Rejected, Shipped, Cancelled).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['In Process', 'Approved', 'Backordered', 'Rejected', 'Shipped', 'Cancelled']
+      - name: card_type
+        description: Credit card type used to pay the order; 'Not informed' when the order has no card.
+        data_tests: [not_null]
+      - name: is_online_order
+        description: True when the order was placed online; false for reseller orders.
+      - name: is_promotion_order
+        description: True when the order has at least one sales reason of type Promotion.
+      - name: order_qty
+        description: Units bought on the line.
+      - name: unit_price
+        description: Selling price per unit.
+      - name: unit_price_discount
+        description: Discount rate on the line (0.10 = 10%).
+      - name: gross_amount
+        description: Gross value of the line, unit_price * order_qty. The 2011 total is reconciled with the audit.
+      - name: discount_amount
+        description: Discount value of the line, unit_price * order_qty * unit_price_discount.
+      - name: net_amount
+        description: >
+          Net value of the line, unit_price * order_qty * (1 - unit_price_discount).
+          The challenge dictionary writes "- (1 - discount)"; that is a typo and is corrected here.
+
+  - name: dim_customers
+    description: One row per customer. Name follows the data dictionary (person name), falling back to the store name.
+    columns:
+      - name: customer_sk
+        description: Surrogate key of the customer.
+        data_tests: [unique, not_null]
+      - name: customer_id
+        description: Customer id from the source.
+      - name: customer_name
+        description: Customer name (person first and last name, or store name).
+      - name: customer_type
+        description: Individual or Store (reseller).
+      - name: store_name
+        description: Reseller store name, when the customer is a store.
+
+  - name: dim_products
+    description: One row per product, with subcategory and category.
+    columns:
+      - name: product_sk
+        description: Surrogate key of the product.
+        data_tests: [unique, not_null]
+      - name: product_id
+        description: Product id from the source.
+      - name: product_name
+        description: Product name.
+      - name: product_number
+        description: Product code.
+      - name: product_subcategory
+        description: Product subcategory; 'Not informed' when missing.
+      - name: product_category
+        description: Product category; 'Not informed' when missing.
+      - name: color
+        description: Product color.
+      - name: list_price
+        description: Current list price.
+
+  - name: dim_locations
+    description: One row per address, with city, state or province and country.
+    columns:
+      - name: location_sk
+        description: Surrogate key of the address.
+        data_tests: [unique, not_null]
+      - name: address_id
+        description: Address id from the source.
+      - name: city
+        description: City.
+      - name: state_province_code
+        description: State or province code.
+      - name: state_province_name
+        description: State or province name.
+      - name: country_region_code
+        description: Country ISO code.
+      - name: country_name
+        description: Country name.
+
+  - name: dim_sales_reasons
+    description: One row per sales reason (for example Price, On Promotion, Manufacturer).
+    columns:
+      - name: sales_reason_sk
+        description: Surrogate key of the sales reason.
+        data_tests: [unique, not_null]
+      - name: sales_reason_id
+        description: Sales reason id from the source.
+      - name: sales_reason_name
+        description: Sales reason name.
+      - name: sales_reason_type
+        description: Reason group (for example Promotion, Marketing, Other).
+
+  - name: bridge_sales_reasons
+    description: >
+      Resolves the many-to-many between orders and sales reasons. One row per order and reason.
+      Totals filtered by reason do not add up to the grand total, because an order can have several reasons.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['sales_order_id', 'sales_reason_fk']
+    columns:
+      - name: sales_order_reason_sk
+        description: Surrogate key of the order and reason pair.
+        data_tests: [unique, not_null]
+      - name: sales_order_id
+        description: Sales order number; joins to fct_sales.sales_order_id.
+        data_tests: [not_null]
+      - name: sales_reason_fk
+        description: Foreign key to dim_sales_reasons.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_sales_reasons')
+                field: sales_reason_sk
+
+  - name: dim_dates
+    description: >
+      One row per calendar day, covering full calendar years from the first to the last order year.
+      Many sales on the same day all point to that day's single row. The source has no time of day.
+    columns:
+      - name: date_day
+        description: Calendar date. Primary key; joins to fct_sales.order_date.
+        data_tests: [unique, not_null]
+      - name: year
+        description: Year.
+      - name: semester
+        description: Semester of the year (1 = January to June, 2 = July to December).
+      - name: year_semester
+        description: Year and semester label, for example 2013-S1.
+      - name: quarter
+        description: Quarter (1 to 4).
+      - name: year_quarter
+        description: Year and quarter label, for example 2013-Q1.
+      - name: month
+        description: Month number (1 to 12); use it to sort month names.
+      - name: month_name
+        description: Month name in English.
+      - name: month_name_pt
+        description: Month name in Portuguese, for the dashboard.
+      - name: year_month
+        description: Year and month as yyyy-MM.
+      - name: month_start_date
+        description: First day of the month; use it as a continuous axis for monthly charts.
+      - name: week_of_year
+        description: ISO week number (1 to 53). Weeks around January 1 can belong to the neighbouring year; use week_start_date to group weeks.
+      - name: week_start_date
+        description: Monday of the week; use it to group by week without year-boundary issues.
+      - name: day_of_month
+        description: Day of the month (1 to 31).
+      - name: day_of_week
+        description: Day of week number (1 = Sunday, 7 = Saturday).
+      - name: day_name
+        description: Day name in English.
+      - name: day_name_pt
+        description: Day name in Portuguese, for the dashboard.
+      - name: is_weekend
+        description: True on Saturdays and Sundays.
