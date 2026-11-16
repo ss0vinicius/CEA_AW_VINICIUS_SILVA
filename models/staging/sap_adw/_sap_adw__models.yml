@@ -1,0 +1,91 @@
+version: 2
+
+models:
+  - name: stg_sap_adw__salesorderheader
+    description: Sales orders, renamed and cast. Status code decoded into order_status. One row per order.
+    columns:
+      - name: sales_order_pk
+        data_tests: [unique, not_null]
+      - name: order_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['In Process', 'Approved', 'Backordered', 'Rejected', 'Shipped', 'Cancelled']
+      - name: order_date
+        description: Order date, cast from the source string; every time-based metric depends on it.
+        data_tests: [not_null]
+
+  - name: stg_sap_adw__salesorderdetail
+    description: Sales order lines, renamed and cast. One row per product within an order.
+    columns:
+      - name: sales_order_detail_pk
+        data_tests: [unique, not_null]
+
+  - name: stg_sap_adw__salesorderheadersalesreason
+    description: Order to sales reason links. One row per order and reason.
+
+  - name: stg_sap_adw__salesreason
+    description: Sales reasons with their type.
+    columns:
+      - name: sales_reason_pk
+        data_tests: [unique, not_null]
+
+  - name: stg_sap_adw__customer
+    description: Customers with links to person (individual) and store (reseller).
+    columns:
+      - name: customer_pk
+        data_tests: [unique, not_null]
+
+  - name: stg_sap_adw__person
+    description: People with a full name built from first and last name.
+    columns:
+      - name: person_pk
+        data_tests: [unique, not_null]
+
+  - name: stg_sap_adw__store
+    description: Reseller stores.
+    columns:
+      - name: store_pk
+        data_tests: [unique, not_null]
+
+  - name: stg_sap_adw__product
+    description: Products with prices and subcategory link.
+    columns:
+      - name: product_pk
+        data_tests: [unique, not_null]
+
+  - name: stg_sap_adw__productsubcategory
+    description: Product subcategories.
+    columns:
+      - name: product_subcategory_pk
+        data_tests: [unique, not_null]
+
+  - name: stg_sap_adw__productcategory
+    description: Product categories.
+    columns:
+      - name: product_category_pk
+        data_tests: [unique, not_null]
+
+  - name: stg_sap_adw__creditcard
+    description: Credit cards (type only; the card number is excluded).
+    columns:
+      - name: credit_card_pk
+        data_tests: [unique, not_null]
+
+  - name: stg_sap_adw__address
+    description: Addresses (city and state link only; street lines excluded).
+    columns:
+      - name: address_pk
+        data_tests: [unique, not_null]
+
+  - name: stg_sap_adw__stateprovince
+    description: States and provinces with country link.
+    columns:
+      - name: state_province_pk
+        data_tests: [unique, not_null]
+
+  - name: stg_sap_adw__countryregion
+    description: Countries and regions.
+    columns:
+      - name: country_region_pk
+        data_tests: [unique, not_null]
